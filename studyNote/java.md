@@ -190,148 +190,139 @@
 3. Condition await()必须和Lock(互斥锁/共享锁)配合使用
 4. Condition await()必须通过singnal()方法进行唤醒
 
-# 设计模式
+**CountDownLatch方式**
 
-## 设计模式的六大原则
+1. CountDownLatch存在于java.util.concurrent下
+2. CountDownLatch能是一个线程等待其他线程完成各自的工作后执行
+3. CountDownLatch是通过一个计数器来实现的，计数器的初始值为线程的数量
 
-### 开闭原则
+**CyclicBarrier方式**
 
-> 对扩展开放，对修改关闭
+1. CyclicBarrier存在于java.util.concurrent包下
+2. CyclicBarrier实现让一组线程等待至某个状态之后再全部同时执行
+3. CyclicBarrier底层是基于ReentrantLock和Condition实现
 
-### 里氏代换原则
+**Semaphore方式**
 
-> 任何基类可以出现的地方，子类一定可以出现。对实现抽象化的具体步骤的规范
+1. Semaphore存在于java.util.concurrent包下
+2. Semaphore用于控制对某组资源的访问权限
 
-### 依赖倒转原则
+### 小结
 
-> 针对接口编程，依赖于抽象而不依赖于具体
+#### sleep和wait区别
 
-### 接口隔离原则
+1. wait只能在同步上下文中调用，否则或抛出非法监视器状态异常（IllegalMonitorStateException）
+2. sleep方法则不需要在同步方法或同步块中调用
+3. wait方法定义在Object类中，作用于对象本身，sleep方法定义在java.lang.Thread中，作用于当前线程
+4. wait会释放资源，sleep不会释放资源
+5. wait方法通过其他线程调用notify()或notifyAll()方法进行唤醒。
+6. sleep()方法通过超时或者调用interrupt()方法进行唤醒。
+7. wait是实例方法，sleep是静态方法
 
-> 使用多个隔离的接口，比使用单个接口要好，降低类之间的耦合度
+#### wait和notify区别
 
-### 迪米特法则，又称最少知道原则
+1. wait和notify都是object中的方法
+2. wait和notify执行前线程都必须获得对象锁
+3. wait的作用是使当前线程进行等待
+4. notify的作用是通知其他等待当前线程的对象锁的线程执行
 
-> 一个实体应当尽量少的与其他实体之间发生相互作用，使得系统功能模块相对独立
+## Java内存模型
 
-### 合成复用原则
+jvm:虚拟机栈，堆，方法区，程序计数器，本地方法栈
 
-> 尽量使用合成/聚合的方式，而不是使用继承
+### PC程序计数器
 
-## 创建型模式
+1. 每个线程对应一个程序计数器
+2. 各线程的程序计数器是线程私有的，互不影响，是线程安全的
+3. 程序计数器记录线程正在执行的内存地址，以便被中断线程恢复执行时再次按照中断的指令地址继续执行
 
-> 创建对象的同时隐藏创建逻辑
+### JVM Stack
 
-### 工厂模式
+1. 每个线程会对应一个java栈
+2. 每个java栈由若干栈帧组成
+3. 每个方法对应一个栈帧
+4. 栈帧在方法运行时，创建并入栈，方法执行完，该栈帧中的元素作为该方法返回值，该栈帧被清除
+5. 栈顶的栈帧叫活动栈，表示当前执行的方法，才可以被cpu执行
+6. 线程请求的栈深度大于虚拟机所允许的深度，将抛出栈溢出错误
+7. 栈扩展时无法申请到足够的内存，就会抛出内存溢出错误
 
-> 主要解决接口选择的问题 
->
-> **应用：** 您需要一辆汽车，可以直接从工厂里面提货，而不用去管这辆汽车是怎么做出来的，以及这个汽车里面的具体实现。 ![]( https://www.runoob.com/wp-content/uploads/2014/08/AB6B814A-0B09-4863-93D6-1E22D6B07FF8.jpg )
+### 方法区MethodArea
 
-### 抽象工厂模式
+1. 方法区时java堆的永久区(PermanetGeneration)
+2. 方法区存放了要加载的类的信息(名称、修饰符等)、类中的静态常量、类中定义为final类型的常量、类中的Field信息、类中的方法信息
+3. 方法区是被java线程共享的
+4. 方法区要使用的内存超过其允许的大小时，会抛出OutOfMemoryError:PremGen space的错误信息
 
-> 主要解决接口选择的问题 
->
-> **应用：** QQ 换皮肤，一整套一起换。 
->
-> ![]( https://www.runoob.com/wp-content/uploads/2014/08/3E13CDD1-2CD2-4C66-BD33-DECBF172AE03.jpg )
+### 常量池Constant Pool
 
-### 单例模式
+1. 常量池是方法区的一部分
 
-> 一个全局使用的类频繁地创建与销毁 
->
-> **应用：** 一个班级只有一个班主任 
->
-> ![]( https://www.runoob.com/wp-content/uploads/2014/08/62576915-36E0-4B67-B078-704699CA980A.jpg )
+2. 常量池中存储两类数据:字面量和引用量
 
-### 建造者模式
+   字面量：字符串、final变量等
 
->解决套餐点餐问题，不同的食物组合会生成不同的套餐
->
->**应用：**  1、去肯德基，汉堡、可乐、薯条、炸鸡翅等是不变的，而其组合是经常变化的，生成出所谓的"套餐"。 2、JAVA 中的 StringBuilder。 
->
->![]( https://www.runoob.com/wp-content/uploads/2014/08/builder_pattern_uml_diagram.jpg )
+   引用量：类/接口、方法和字段的名称和描述
 
-### 原型模式
+3. 常量池在编译期间就被确定，并保存在已编译的.class文件中
 
-> 在运行期建立和删除原型 
-> **应用：** 1、细胞分裂。 2、JAVA 中的 Object clone() 方法
->
-> ![](  https://www.runoob.com/wp-content/uploads/2014/08/prototype_pattern_uml_diagram.jpg )
+   
 
-## 结构型模式
+### JVM执行流程
 
-### 适配器模式
+1. 类加载器将java代码加载到方法区
+2. 执行引擎从方法区找到main方法
+3. 为方法创建栈帧放入方法栈，同时创建该栈帧的程序计数器
+4. 执行引擎请求CPU执行该方法
+5. CPU将方法栈数据加载到工作内存(寄存器和高速缓存)，执行该方法
+6. CPU执行完之后将执行结果从工作内存同步到主内存
 
-> 解决接口不兼容问题
->
-> ![](https://www.runoob.com/wp-content/uploads/2014/08/adapter_pattern_uml_diagram.jpg )
+## 多线程
 
- 
+### 多线程特性
 
-### 桥接模式
+多线程编程要满足三个特性：原子性，可见性，有序性
 
-> 在有多种可能会变化的情况下，用继承会造成类爆炸问题，扩展起来不灵活 
->
->**应用：** 1、对于那些不希望使用继承或因为多层次继承导致系统类的个数急剧增加的系统。2、 一个类存在两个独立变化的维度，且这两个维度都需要进行扩展。 
->
->![]( https://www.runoob.com/wp-content/uploads/2014/08/bridge_pattern_uml_diagram.jpg )
+1. 原子性：一个操作或多个操作要么全部执行并且执行的过程不会被任何因素打断，要么都不执行
+2. 可见性：多个线程访问同一变量时，一个线程修改了该变量的值，其他线程能立即看到修改的值
+3. 有序性：程序执行的顺序按照代码的先后顺序执行
 
-### 过滤器模式
+### 多线程控制类
 
-### 组合模式
+为保证多线程的三个特性，java引入了很多线程控制机制：
 
-### 装饰者模式
+1. ThreadLocal:线程本地变量
+2. 原子类：保证变量原子操作
+3. Lock类：保证线程有序性
+4. Volatile关键字：保证线程变量可见性
 
-### 外观模式
+### ThreadLocal
 
-### 享元模式
+1. **作用：**提供线程局部变量，即为使用相同变量的每一个线程维护一个该变量的副本。当某些数据是以线程为作用域并且不同线程具有不同的数据副本时，就可考虑使用。如：数据库连接Connection，每个请求处理线程都需要，但又不相互影响，就使用ThreadLocal实现。
+2. **常用方法：**
+   1. initialValue:副本创建方法
+   2. get：获取副本方法
+   3. set：设置副本方法
 
-### 代理模式
+### 原子类
 
-## 行为型模式
+java.util.concurrent.atomic包，解决基本类型操作的非原子性导致在多线程并发情况下引发的问题
 
-### 责任链模式
+1. 原子更新基本类型：AtomicInteger、AtomicBoolean、AtomicLong
+2. 原子更新数组类型：AtomicIntegerArray、AtomicLongArray
+3. 原子更新引用类型：AtomicReference、AtomicStampedReference等
+4. 原子更新属性类型：AtomicIntegerFieldUpdater、AtomicLongFieldUpdater
 
-### 命令模式
+CAS(CompareAndSwap)的ABA问题**
 
-### 解释器模式
+1. **ABA问题：**一个线程把数据A变为了B，然后又重新变成了A。此时另外一个线程读取的时候，发现A没有变化，就误以为是原来的那个A。
+2. **解决ABA问题：**使用AtomicStampedReference
+   1. AtomicStampedReference(初始值，时间戳)：构造函数设置初始值和初始时间
+   2. getStamp：获取时间戳
+   3. getReference：获取预期值
+   4. compareAndSet(预期值，预期时间戳，更新时间戳):实现CAS时间戳和预期值的比对
 
-### 迭代模式
+### Lock类
 
-### 中介者模式
+#### 可重入锁
 
-### 备忘录模式
-
-### 观察者模式
-
-### 状态模式
-
-### 空对象模式
-
-### 策略模式
-
-### 模板模式
-
-### 访问者模式
-
-## J2EE模式
-
-### MVC模式
-
-### 业务代表模式
-
-### 组合实体模式
-
-### 数据访问对象模式
-
-### 前端控制器模式
-
-### 拦截过滤器模式
-
-### 服务定位模式
-
-### 传输对象模式
-
-
-
+可重复获取相同的锁而不会出现死锁现象，synchronized和ReentrantLock都是可重入锁
