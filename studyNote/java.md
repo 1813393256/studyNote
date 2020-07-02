@@ -190,6 +190,98 @@
 3. Condition await()必须和Lock(互斥锁/共享锁)配合使用
 4. Condition await()必须通过singnal()方法进行唤醒
 
+### 多线程
+
+#### wait与sleep的区别
+
+1. wait只能在同步上下文中调用，否则会抛出异常，sleep则不需要
+
+2. wait方法定义在Object类中，作用于对象本身，sleep方法定义在java.lang.Thread中，作用于当前线程
+
+3. wait会释放锁资源，sleep则不会
+
+4. wait是实例方法，sleep是静态方法
+
+   
+
+#### wait和notify的区别
+
+1. wait和notify都是object中的方法
+
+2. wait和notify执行当前线程都必须获取对象锁
+
+3. wait的作用是使当前线程进行等待
+
+4. notify通知其他等待当前线程的对象锁线程
+
+   
+
+#### 多线程特性
+
+多线程编程需要满足三个特性：原子性，可见性，有序性
+
+1. 原子性：一个操作或者多个操作要么全部执行并且执行的过程中不会被任何因素打断，要么就都不执行
+
+2. 可见性：当多个线程访问同一变量时，一个线程修改了这个变量的值，其他线程能立即看到当前修改的值。
+
+3. 有序性：程序执行的顺序按照代码的先后顺序执行
+
+   
+
+#### 多线程控制类
+
+保证多线程的三个特性：原子性，可见性，有序性
+
+1. ThreadLocal:线程本地变量
+2. 原子类：保证变量原子操作
+3. Lock类：保证线程的有序性
+4. volatile关键字：保证线程变量可见性
+
+#### ThreadLocal
+
+ThreadLocal提供线程局部变量，即使用相同变量的每一个线程维护一个该变量的副本
+
+**常用方法：**
+
+1. initialValue:副本创建方法
+
+2. set：设置副本方法
+
+3. get：获取副本方法
+
+   
+
+#### 原子类
+
+解决基本类型操作的非原子性导致在多线程并发情况下引发的问题
+
+java.util.concurrent.automic包里面提供很多可以进行原子操作的类，分为以下四类：
+
+1. 原子更新基本类型：AtomicInteger、AtomicBoolean、AutomicLong
+
+2. 原子更新数组类型：AtomicIntegerArray、AtomicLongArray
+
+3. 原子更新引用类型：AtomicReference、AtomicStampedReference等
+
+4. 原子更新属性类型:AtomicIntegerFieldUpdater、AtomicLongFieldUpdater
+
+   
+
+**CAS(CompareAndSwap)的ABA问题**
+
+1. **ABA问题：**一个线程把数据A变为了B，然后又重新变成了A。此时另外一个线程读取的时候，发现A没有变化，就误以为是原来的那个A。
+2. **解决ABA问题：**使用AtomicStampedReference
+   1. AtomicStampedReference(初始值，时间戳)：构造函数设置初始值和初始时间
+   2. getStamp：获取时间戳
+   3. getReference：获取预期值
+   4. compareAndSet(预期值，预期时间戳，更新时间戳):实现CAS时间戳和预期值的比对
+
+### Lock类
+
+#### 可重入锁
+
+可重复获取相同的锁而不会出现死锁现象，synchronized和ReentrantLock都是可重入锁
+
 # 设计模式
 
 ## 设计模式的六大原则
