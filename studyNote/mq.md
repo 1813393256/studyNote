@@ -384,13 +384,199 @@ spring:
     password: admin
   jms:
     pub-sub-domain: false #false=Queue  true= Topic 默认false
-
+    #pub-sub-domain: true #false=Queue  true= Topic 默认false
 #自己定义队列Queue的名称
 myqueue: boot-activemq-queue
+#自定义topic名称
+#mytopic: boot-activemq-topic
 ```
 
-## 队列
+## 队列与发布订阅
 
+```java
+//ConfigBean类，用于加载yml文件中定义的名字，并装配queue
+@Component
+@EnableJms
+public class ConfigBean {
+    @Value("${myqueue}")
+    private String myQueue;
+    
+    @Bean //<bean id="" class="">
+    public Queue queue(){
+        return new ActiveMQQueue(myQueue);
+    }
+    
+  //  @Value("${mytopic}")
+  //  private String mytopic;
+    
+     /*@Bean
+    public Topic topic(){
+        return new ActiveMQTopic(topicName);
+    }*/
+}
+```
 
+```java
+//生产者
+@Component
+public class Queue_producer {
+    @Autowired
+    private JmsMessagingTemplate jmsMessagingTemplate;
+    @Autowired
+    private Queue queue;
+    /*@Autowired
+    private Topic topic;*/
+    
+    public void produceMsg(){
+        //参数修改为topic即可
+        jmsMessagingTemplate.convertAndSend(queue,"******"+ UUID.randomUUID().toString().substring(0,6));
+    }
+    
+    //间隔时间3秒钟定投，要求主启动类加@EnableScheduling
+    @Scheduled(fixedDelay = 3000)
+    public void produceMsgScheduled(){
+ //参数修改为topic即可       
+  jmsMessagingTemplate.convertAndSend(queue,"****Scheduled"+ UUID.randomUUID().toString().substring(0,6));
+        System.out.println("*****produceMsgScheduled send ok");
+    }
+}
+```
 
-## 发布订阅
+```java
+//消费者
+@Component
+public class ConsumerService {
+    //destination="${mytopic}"
+    @JmsListener(destination = "${myqueue}")
+    public void method_receive(TextMessage textMessage) throws JMSException {
+        System.out.println("消费者收到消息**"+textMessage.getText());
+    }
+}
+```
+
+# ActiveMQ的传输协议
+
+ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),VM
+
+1. TCP:默认的协议，性能相对可以
+2. NIO：基于TCP协议之上的，进行了扩展和优化，具有更好的扩展性
+3. UDP：性能比TCP好，但是不具有可靠性
+4. SSL：安全连接
+5. HTTP(S):基于HTTP或HTTPS
+6. VM：VM本身不是协议，当客户端和代理在同一个Java虚拟机(VM)中运行时，他们之间需要通信，但不想占用网络通道，而是直接通信，可以使用该方式。
+
+## 传输协议配置
+
+1. 修改conf/activemq.xml文件，添加以下配置即可
+
+2. 地址：http://activemq.apache.org/configuring-transports
+
+3. nio配置：
+
+   ```xml
+   <transportConnectors>
+       <transportConnector name="nio" uri="nio://0.0.0.0:61616？trace=true"/>  
+     </<transportConnectors>
+   ```
+
+4. auto+nio配置：自动检测+nio，5.13版本以上
+
+   ```xml
+   <transportConnector name="auto+nio" uri="auto+nio://0.0.0.0:61618?maximumConnections=1000&amp;wireFormat.maxFrameSize=104857600&amp;org.apache.activemq.transport.nio.SelectorManager.corePoolSize=20&amp;org.apache.activemq.transport.nio.SelectorManager.maximumPoolSize=50"/>
+   ```
+
+# ActiveMQ的消息存储和持久化
+
+## 官网
+
+1. 地址：http://activemq.apache.org/persistence
+
+## 是什么?
+
+1. 为避免意外宕机以后丢失数据，需要做到重启后可以恢复消息队列，消息系统一般都会采用持久化机制。
+2. ActiveMQ的消息持久化机制有JDBC，AMQ，KahaDB和LevelDB，无论使用哪种持久化方式，消息的存储逻辑都是一致的
+3. 发送者将消息发送出去后，消息中心首先将消息存储到本地数据文件，内存数据库或远程数据库等，再试图将消息发送给接收者，成功则将消息从存储中删除，失败则继续尝试发送。
+4. 消息中心启动以后，首先要检查指定的存储位置，如果有未发送成功的消息，则需要把消息发送出去。
+
+## 可靠性
+
+1. activemq本身具有持久化，还支持可持久化机制(另一台服务器上存储有副本，不用担心MQ服务器宕机)。
+2. activemq事务，持久，签收保证了消息的可靠性，同时其还支持可持久化
+
+## 有哪些?
+
+1. AMQ Message Store:基于文件的存储方式，是以前的默认消息存储，现在不用了。
+
+2. KahaDB消息存储(默认):基于日志文件，从ActiveMQ5.4开始默认的持久化插件
+
+3. JDBC消息存储：消息基于JDBD存储的
+
+4. LevelDB消息存储：和KahaDB类似，基于文件的本地数据库存储形式，但它提供比KahaDB更快的持久性，不使用自定义B-Tree实现索引预写日志，而是使用基于LevelDB索引。默认配置如下：
+
+   ```xml
+   <persistenceAdapter>
+       <levelDBdirectory="activemq-data"/>
+   </persistenceAdapter>
+   ```
+
+   
+
+5. JDBC Message Store with ActiveMQ Journal
+
+## KahaDB
+
+1. 官网: http://activemq.apache.org/kahadb
+2. KahaDB是目前默认的存储方式，可用于任何场景，提高了性能和恢复能力
+3. 消息存储使用一个事务日志和仅仅用一个索引文件来存储它所有的地址
+4. KahaDB是一个专门针对消息持久化的解决方案，它对典型的消息使用模式进行了优化
+5. 数据被追加到data logs中。当不再需要log文件中的数据时，log文件会被丢弃
+
+**存储文件介绍**
+
+1. db<Number>.log,存储消息到预定义大小的数据记录文件中，文件命名为db<Number>.log,当数据文件已满时，一个新的文件会随着创建，number数值也会随之递增，它随着消息数量的增多，如每32M一个文件，文件名按照数字进行编号，如db-1.log，db-2.log...。当不再有引用到数据文件中的任何消息时，文件会被删除或归档
+2. db.data该文件包含了持久化的BTree索引，索引了消息数据记录中的消息，它是消息的索引文件，本质上是B-Tree(B树),使用B-Tree作为索引指向db-<Number>.log里面存储的信息
+3. db.free当前db.data文件里那些页面是空闲的，文件具体内容是所有空闲页的ID
+4. db.redo用来进行消息恢复，如果KahaDB消息存储在强制退出后启动，用于恢复BTree索引
+5. lock文件锁，表示当前获得Kahadb读写权限的broker。
+
+## JDBC消息存储
+
+1. MQ+MySQL
+
+2. 配置地址:  http://activemq.apache.org/persistence
+
+3. 添加mysql数据库的驱动包到lib文件夹
+
+4. jdbcPersistenceAdapter配置:
+
+   ```xml
+   <persistenceAdapter> 
+     <jdbcPersistenceAdapter dataSource="#my-ds"/> 
+   </persistenceAdapter>
+   ```
+
+   ```xml
+   <bean id="mysql-ds" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close"> 
+       <property name="driverClassName" value="com.mysql.jdbc.Driver"/> 
+       <property name="url" value="jdbc:mysql://localhost/activemq?relaxAutoCommit=true"/> 
+       <property name="username" value="root"/> 
+       <property name="password" value="123456"/> 
+       <property name="maxTotal" value="200"/>
+       <property name="poolPreparedStatements" value="true"/> 
+     </bean> 
+   ```
+
+5. 建仓SQL和建表
+
+6. 代码运行验证
+
+7. 数据库情况
+
+8. 小总结
+
+9. 开发有坑
+
+# ActiveMQ多节点集群
+
+# 高级特性和大厂常考重点
+
