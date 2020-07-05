@@ -1,5 +1,23 @@
 # java
 
+## JAVAEE
+
+JavaEE是一套使用java进行企业级应用开发的大家一致遵循的13个核心规范工业标准。JavaEE平台提供了一个基于组件的方法来加快设计、开发、装配及部署企业应用程序。
+
+1. JDBC(Java Database)数据库连接
+2. JNDI(Java Naming and Directory Interfaces)Java的命名和目录接口
+3. EJB(Enterprise JavaBean)
+4. RMI(Remote Method Invoke)远程方法调用
+5. Java IDL(Interface Description Language)/CORBA(Common Object Broker Architecture)接口定义语言/公用对象请求代理程序体系结构
+6. JSP(Java Server Pages)
+7. Servlet
+8. XML(Extensible Markup Language)可扩展标记语言
+9. JMS(Java Message Service)Java消息服务
+10. JTA(Java Transaction API)Java事务API
+11. JTS(Java Transaction Service)Java事务服务
+12. JavaMail
+13. JAF(JavaBean Activation Framework)
+
 ## 浅拷贝与深拷贝
 
 **浅拷贝** 对基本数据类型进行值传递，对引用数据类型进行引用传递般的拷贝，此为浅拷贝。 
