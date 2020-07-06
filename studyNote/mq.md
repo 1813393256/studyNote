@@ -545,13 +545,14 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
 
 2. 配置地址:  http://activemq.apache.org/persistence
 
-3. 添加mysql数据库的驱动包到lib文件夹
+3. 添加mysql数据库的驱动包到activemq的lib文件夹
 
 4. jdbcPersistenceAdapter配置:
 
    ```xml
    <persistenceAdapter> 
-     <jdbcPersistenceAdapter dataSource="#my-ds"/> 
+    <!--createTablesOnStartup 刚启动就创建表，首次启动true，以后请设置为false，默认true-->
+     <jdbcPersistenceAdapter dataSource="#mysql-ds" createTablesOnStartup="true"/> 
    </persistenceAdapter>
    ```
 
@@ -567,6 +568,44 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
    ```
 
 5. 建仓SQL和建表
+
+   1. 创建activemq数据库
+
+   2. ACTIVEMQ_MSGS:
+
+      ```properties
+      消息表，queue和topic都存在里面
+      ID:自增的数据库主键
+      CONTAINER:消息的Destination
+      MSGID_PROD:消息发送者的主键
+      MSG_SEQ:发送消息的顺序，MSGID_PROD+MSG_SEQ可以组成JMS的MessageID
+      EXPIRATION:消息的过期时间，存储的是从1970-01-01到现在的毫秒数
+      MSG:消息本体的Java序列化对象的二进制数据
+      PRIORITY:优先级，从0-9，数值越大优先级越高
+      ```
+
+   3. ACTIVEMQ_ACKS:
+
+      ```properties
+      用于存储订阅关系。如果是持久化Topic，订阅者和1服务器的订阅关系在这个表保存。
+      存储持久订阅的信息和最后一个持久订阅接收的消息ID
+      CONTAINER:消息的Destination
+      SUB_DEST:如果是使用Static集群，这个字段会有集群其他系统的消息
+      CLIENT_ID:每个订阅者都必须有一个唯一的客户端ID用于区分
+      SUB_NAME:订阅者名称
+      SELECTOR:选择器，可以选择只消费满足条件的消息。条件可以用自定义属性实现，可支持多属性AND和OR操作
+      LAST_ACKED_ID:记录消费过的消息的ID。
+      ```
+
+      
+
+   4. ACTIVEMQ_LOCK:
+
+      ```properties
+      在集群环境中才有用，只有一个Broker可以获得消息，称为Master Broker,其他的只能作为备份等待Master Broker不可用，才可能成为下一个Master Broker。这个表记录那个Broker是当前的Master Broker。
+      ID:唯一的锁id
+      Broker Name：拥有锁的ActiveMQ的名字
+      ```
 
 6. 代码运行验证
 
