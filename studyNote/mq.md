@@ -550,6 +550,7 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
 4. jdbcPersistenceAdapter配置:
 
    ```xml
+   <!-- broker 标签内 -->
    <persistenceAdapter> 
     <!--createTablesOnStartup 刚启动就创建表，首次启动true，以后请设置为false，默认true-->
      <jdbcPersistenceAdapter dataSource="#mysql-ds" createTablesOnStartup="true"/> 
@@ -557,9 +558,10 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
    ```
 
    ```xml
+   <!-- 放在broker标签外 -->
    <bean id="mysql-ds" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close"> 
        <property name="driverClassName" value="com.mysql.jdbc.Driver"/> 
-       <property name="url" value="jdbc:mysql://localhost/activemq?relaxAutoCommit=true"/> 
+       <property name="url" value="jdbc:mysql://localhost:3306/activemq?relaxAutoCommit=true"/> 
        <property name="username" value="root"/> 
        <property name="password" value="123456"/> 
        <property name="maxTotal" value="200"/>
@@ -609,11 +611,70 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
 
 6. 代码运行验证
 
-7. 数据库情况
+   1. 点对点类型中，当DeliveryMode设置为NON_PERSISTENCE时，消息被保存在内存中；当DeliveryMode设置为PERSISTENCE时，消息保存在broker的相应的文件或数据库中。并且消息一旦被Consumer消费就从broker中删除。
+   2. 发布订阅中，消费者启动，持久化时，会把消费者信息存入ack表中，生产者发布的消息会存入msg表中。
 
-8. 小总结
+7. 小总结
 
-9. 开发有坑
+   1. queue，在没有消费者消费的情况下，会将消息保存到activemq_msgs表中，只要有任意一个消费者已经消费过了，消费之后这些消息会立即被删除。
+   2. topic，一般是先启动消费订阅然后再生产的情况下，会将消息保存到activemq_acks。
+
+8. 开发有坑
+
+   1. 在配置关系型数据库作为ActiveMQ的持久化存储方案时，有坑
+   2. 数据库jar包：将需要使用到的相关jar文件放置到ActiveMQ安装路劲下的lib目录。mysql-jdbc驱动的jar包和对应的数据库连接池jar包
+   3. createTablesOnStartup属性：在jdbcPersistenceAdapter标签中设置了createTablesOnStartup属性为true时，在第一次启动ActiveMQ时，ActiveMQ服务节点会自动创建所需要的数据表，启动完成后可以去掉这个属性，或者更改createTablesOnStartup属性为false。
+   4. 下划线坑爹："java.lang.illegalStateException:BeanFactory not initialized or already closed"这是因为您的操作系统的机器名中有"_"符号，请更改机器名并且重启后即可解决问题。
+
+## JDBC+Journal
+
+**xml配置**
+
+```xml
+<persistenceFactory>
+	<journalPersistenceAdapterFactory 
+    	journalLogFiles="4"
+        journalLogFileSize="32768"
+        useJournal="true"
+        useQuickJournal="true"
+        dataSource="#mysql-ds"
+        dataDirectory="activemq-data"/> 
+</persistenceFactory>
+```
+
+**数据库配置**
+
+```xml
+<!-- 放在broker标签外 -->
+<bean id="mysql-ds" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close"> 
+    <property name="driverClassName" value="com.mysql.jdbc.Driver"/> 
+    <property name="url" value="jdbc:mysql://localhost:3306/activemq?relaxAutoCommit=true"/> 
+    <property name="username" value="root"/> 
+    <property name="password" value="123456"/> 
+    <property name="maxTotal" value="200"/>
+    <property name="poolPreparedStatements" value="true"/> 
+  </bean> 
+```
+
+1. 这种方式克服了JDBC Store的不足，JDBC每次消息过来，都需要去写库和读库。
+2. ActiveMQ Journal，使用高速缓存写入技术，大大提高了性能。
+3. 当消费者的消费速度能够及时跟上生产者消息的生成速度时，journal文件能够大大减少需要写入到DB中的消息。
+4. 示例：生产者生产了1000条消息，这1000条消息会保存到journal文件，如果消费者的消费速度很快的情况下，在journal文件还没有同步到DB之前，消费者已经消费了90%以上的消息，那么这个时候只需要同步剩余的10%的消息到DB，如果消费者的消费速度很慢，者个时候journal文件可以使消息以批量方式写到DB。
+
+## ActiveMQ持久化机制小总结
+
+**持久化消息**：MQ所在的服务器down了消息不会丢失的机制
+
+**持久化机制演化过程:**从最初的AMQ Message Store方案到ActiveMQ v4版本中推出的High performance journal(高性能事务支持)附件，并且同步推出了关于关系型数据库的存储方法，ActiveMQ 5.3 版本中又推出了对KahaDB的支持(v5.4版本后称为ActiveMQ默认的持久化方案)，后来ActiveMQ v5.8版本喀什支持LevelDB，到现在，v5.9+版本提供了标准的Zookeeper+LevelDB集群化方案。
+
+**ActiveMQ的消息持久化机制有：**
+
+1. AMQ：基于日志文件
+2. KahaDB：基于日志文件，从ActiveMQ 5.4开始默认的持久化插件
+3. JDBC：基于第3放数据库
+4. LevelDB：基于文件的本地数据库存储，从ActiveMQ5.8版本之后又推出了LevelDB的持久化引擎性能高于KahaDB
+5. Replicated LevelDB Store：从ActiveMQ5.9提供了基于LevelDB和Zookeeper的数据复制方式，用于Master-slave方式的首选数据复制方案。
+6. 无论使用哪种持久化方式，消息存储逻辑都是一致的。
 
 # ActiveMQ多节点集群
 
