@@ -678,5 +678,77 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
 
 # ActiveMQ多节点集群
 
+## 面试题
+
+1. 引入消息队列后如何保证其高可用性
+
+## 是什么？
+
+1. 基于Zookeeper和LevelDB搭建ActiveMQ集群。
+2. 集群仅提供主备方式的高可用集群功能，避免单点故障。
+
+## 主从集群
+
+**Zookeeper+replicated-leveldb-store的主从集群**
+
+1. 避免单点故障
+
+2. 原理说明
+
+   ```markdown
+   1. 使用Zookeeper集群注册所有的ActiveMQ Broker,但只有其中的一个Broker可以提供服务，他被视为Master，其他的Broker处于待机状态，被视为Slave。
+   2. 如果Master因故障而不能提供服务，Zookeeper会从Slave中选举一个Broker充当Master。
+   3. Slave连接Master并同步他们的存储状态，Slave不接受客户端连接。所有的存储操作都将会被复制到连接至Master的Slaves。
+   4. 如果Master宕机，得到了最新更新的Slave会成为Master。
+   5. 故障节点在恢复后会重新加入到集群中并连接Master进入Slave模式
+   6. 所有需要同步的消息操作都将等待存储状态被复制到其他法定节点的操作完成才能完成。
+   7. 如果配置了replicas=3，那么法定大小是(3/2)+1=2。Master将会存储并更新，然后等待(2-1)=1个Slave存储和更新完成，才汇报success。
+   8. 有一个node要作为观察者存在。当一个新的Master被选中，你需要至少保障一个法定node在线以能够找到拥有最新状态的node。这个node才可以成为最新的Master。
+   9. 因此，推荐运行至少3个replica nodes以防止一个node失败后服务中断。
+   ```
+
+## 部署规划和步骤
+
+1. 环境和版本
+2. 关闭防火墙并保证win可以ping通ActiveMQ服务器
+3. 要求具备ZK集群并可以成功启动
+4. 集群部署规划列表
+5. 创建3台集群目录
+6. 修改管理控制台端口
+7. hostname名字映射
+8. ActiveMQ集群配置
+9. 修改各节点的消息端口
+10. 按顺序启动3个ActiveMQ节点，前提：zk集群已经成功启动运行
+11. zk集群的节点状态说明
+
 # 高级特性和大厂常考重点
 
+## 引入消息队列之后该如何保证其高可用性
+
+```markdown
+持久化，事物，签收，zookeeper+replicated-leveldb-store的主从集群
+```
+
+## 异步投递Async Sends
+
+```java
+//异步投递开启方法：
+1. tcp://localhost:61616?jms.useAsyncSend=true
+2. ((ActiveMQConnectionFactory)connectionFactory).setUseAsyncSend(true);
+3. ((ActiveMQConnection)connection).setUseAsyncSend(true)
+
+//异步发送如何确保发送成功
+
+```
+
+
+
+## 延迟投递和定时投递
+
+## 分发策略
+
+## ActiveMQ消费重试机制
+
+## 死信队列
+
+## 如何保证消息不被重复消费？幂等性问题你谈谈
