@@ -731,24 +731,127 @@ ActiveMQ支持的client-broker通信协议有：TCP，NIO，UDP，SSL，Http(s),
 
 ## 异步投递Async Sends
 
+1. 对于一个Slow Consumer，使用同步发送信息可能出现Producer堵塞等情况，慢消费者适合异步发送。
+2. ActiveMQ支持同步、异步两种发送的模式将小发送到broker，模式的选择对发送延迟有巨大的影响。producer能达到怎样的产出率(产出率=发送数据总量/时间)主要受发送延时的影响，使用异步发送可以显著的提高发送的性能。
+3. **ActiveMQ默认使用异步发送的模式**：除非**明确指定使用同步发送的方式**或者在**未使用事物的前提下发送持久化的消息**，这两种情况都是**同步**发的。
+4. 如果你没有使用事物且发送的是持久化的消息，每一次发送都是同步发送的且会阻塞producer直到broker返回一个确认，表示消息已经被安全的持久化到磁盘。确认机制提供了消息安全的保障，但同时会阻塞客户端，带来了很大的延时。
+5. 很多高性能的应用，允许在失败的情况下有少量的数据丢失。如果你的应用满足这个特点，可以使用异步发送来提高生产率，即使发送的是持久化的消息。
+
 ```java
 //异步投递开启方法：
 1. tcp://localhost:61616?jms.useAsyncSend=true
 2. ((ActiveMQConnectionFactory)connectionFactory).setUseAsyncSend(true);
 3. ((ActiveMQConnection)connection).setUseAsyncSend(true)
 
-//异步发送如何确保发送成功
-
+//异步发送如何确保发送成功，部分关键代码
+ActiveMQConnectionFactory factory=new ActiveMQConnectionFactory(ACTIVEMQ_URL);
+				factory.setUseAsyncSend(true);
+ActiveMQMessageProducer activeMQMessageProducer = (ActiveMQMessageProducer)session.createProducer(queue);
+        activeMQMessageProducer.setDeliveryMode(DeliveryMode.PERSISTENT);
+        for (int i=0;i<3;i++){
+            Message message = session.createTextMessage("async持久化到数据库:"+i);
+            message.setJMSMessageID(UUID.randomUUID().toString()+"--异步发送成功确认？--");
+            String jmsMessageID = message.getJMSMessageID();
+            activeMQMessageProducer.send(message, new AsyncCallback() {
+                @Override
+                public void onSuccess() {
+                    System.out.println(jmsMessageID+": has been ok send");
+                }
+                @Override
+                public void onException(JMSException e) {
+                    System.out.println(jmsMessageID+": fail to send of activemq");
+                }
+            });
+        }
 ```
 
+**异步发送**
 
+```markdown
+1. 它可以最大化producer端的发送效率。我们通常在发送消息量比较密集的情况下使用异步发送，它可以很大的提升Producer性能；不过这也带来了额外的问题：
+2. 就是需要消耗较多的client端内存，同时会导致broker端性能消耗增加；
+3. 他不能有效的确保消息的发送成功。在useAsyncSend=true的情况下，客户端需要容忍消息丢失的可能。
+```
 
 ## 延迟投递和定时投递
 
+1. AMQ_SCHEDULED_DELAY:long	延迟投递的时间
+
+2. AMQ_SCHEDULED_PERIOR:long	重复投递的时间间隔
+
+3. AMQ_SCHEDULED_REPEAT:int    重复投递次数
+
+4. AMQ_SCHEDULED_CRON:String    Cron表达式
+
+5. activemq.xml配置
+
+   ```xml
+   //要在activemq.xml中配置schedulerSupport属性为true
+   <broker xmlns="http://activemq.apache.org/schema/core" brokerName="localhost" dataDirectory="${activemq.data}" schedulerSupport="true">
+   ```
+
+6. java代码
+
+   ```java
+   //java代码里面封装的辅助消息类型：ScheduledMessage
+   //代码：
+   Long delay=2*1000l;//延迟2秒后发送
+   Long perior=4*1000l;//消息间隔4秒
+   int repeat=5;//重复发送4次
+   for (int i=0;i<3;i++){
+       Message message = session.createTextMessage("async持久化到数据库:"+i);
+       message.setLongProperty(ScheduledMessage.AMQ_SCHEDULED_DELAY,delay);
+       message.setLongProperty(ScheduledMessage.AMQ_SCHEDULED_PERIOD, perior);
+       message.setIntProperty(ScheduledMessage.AMQ_SCHEDULED_REPEAT, repeat);
+       producer.send(message);
+   }
+   ```
+
 ## 分发策略
+
+...........................................................目前没有.................................
 
 ## ActiveMQ消费重试机制
 
-## 死信队列
+**具体哪些情况会引起消息重发？**
+
+1. Client用了transactions且在session中调用了rollback()
+2. Client用了transactions且在调用commit()之前关闭或者没有commit
+3. Client在CLIENT_ACKNOWLEDGE的传递模式下，在session中调用了recover()
+
+**请说说消息重发时间间隔和重构发次数吗？**
+
+1. 间隔：1s
+2. 次数：6
+
+**有毒消息Poison ACK谈谈你的理解**
+
+1. 一个消息被redelivedred超过默认的最大重发次数(默认6次)时，消费端会给MQ发送一个“poison ack”表示这个消息有毒，告诉broker不要再发了，这个时候broker会把这个消息放到DLQ(死信队列)。
+
+**属性：**
+
+1. backOffMultiplier：重连时间间隔递增倍数，只有值大于1和启用useExponentialBackOff参数时才生效，默认为5
+2. collisionAvoidanceFactor：设置防止冲突范围的正负百分比，只有启用useCollisionAvoidance参数时才生效。也就是再延迟时间上再加一个时间波动范围。默认值为0.15
+3. initialRedeliveryDelay：初始重发延迟时间，默认1000L
+4. maximumRedeliveries：最大重传次数，达到最大重连次数后抛出异常，为-1时不限制次数，为0时表示不进行重传。默认值为6
+5. maximumRedeliveryDelay：最大传送延迟，只在useExponentialBackOff为true时有效(v5.5)，假设首次重连间隔为10ms，倍数为2，那么第二次重连时间间隔为20ms，第三次重连时间间隔为40ms，当重连时间间隔大于最大重连时间间隔时，以后每次重连时间间隔都为最大重连时间间隔。默认为-1。
+6. redeliveryDelay：重发延迟时间，当initialRedeliveryDelay=0时生效，默认为1000L
+7. useCollisionAvoidance：启用防止冲突功能，默认false
+8. useExponentialBackOff：启用指数倍数递增的方式增加延迟时间，默认false。
+
+## 死信队列(DLQ)
+
+1. ActiveMQ中引入了“死信队列”（Dead Letter Queue）的概念。即一条消息再被重发了多次后(默认为6次redeliveryCounter==6)，将会被ActiveMQ移入"死信队列"。开发人员可以在这个Queue中查看出错的信息。进行人工干预。
+2. 处理失败的消息
+3. 尚硅谷p67
 
 ## 如何保证消息不被重复消费？幂等性问题你谈谈
+
+网络延迟传输中，会造成进行MQ重试，在重试过程中，可能会造成重复消费。
+
+**解决方案：**
+
+1. 如果消息是做数据库的插入操作，给这个消息做一个唯一主键，那么就算出现重复消费的情况，就会导致主键冲突，避免数据库出现脏数据。
+2. 设置token
+3. 如果上面两种情况还不行，准备一个第三方服务方来做消费记录，以redis为例，给消息分配一个全局id，只有消费过该消息，将<id,message>以K-V形式写入redis。那消费者开始消费前，先去redis中查询有没有消费记录即可。
+
